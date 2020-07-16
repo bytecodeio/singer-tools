@@ -48,6 +48,7 @@ class StreamAcc(object):
     num_records = attr.ib(default=0)
     num_schemas = attr.ib(default=0)
     latest_schema = attr.ib(default=None, repr=False)
+    num_key_property_collisions = attr.ib(default=0)
 
 
 @attr.s
@@ -64,9 +65,20 @@ class OutputSummary(object):
             self.streams[stream_name] = StreamAcc(stream_name) # pylint: disable=unsubscriptable-object
         return self.streams[stream_name] # pylint: disable=unsubscriptable-object
 
+    def check_key_properties(self, stream, message):
+        for property in stream.key_properties:
+            if message.record[property] in stream.key_property_list:
+                print('I saw a key_property collision for {} in stream {}'.format(
+                        message.record[property], stream))
+                stream.num_key_property_collisions += 1
+            else:
+                stream.key_property_list.append(message.record[property])
+        
+
     def add(self, message):
         if isinstance(message, singer.RecordMessage):
             stream = self.ensure_stream(message.stream)
+            self.check_key_properties(stream, message)
             if stream.latest_schema:
                 validator_fn = extend_with_default(Draft4Validator)
                 validator = validator_fn(
@@ -82,6 +94,8 @@ class OutputSummary(object):
             stream = self.ensure_stream(message.stream)
             stream.num_schemas += 1
             stream.latest_schema = message.schema
+            stream.key_properties = message.key_properties
+            stream.key_property_list = []
 
         elif isinstance(message, singer.StateMessage):
             self.latest_state = message.value
@@ -96,6 +110,8 @@ class OutputSummary(object):
     def num_messages(self):
         return self.num_records() + self.num_schemas() + self.num_states
 
+    def num_key_property_collisions(self):
+        return (stream.num_key_property_collisions for stream in self.streams.values())
 
 class StdoutReader(threading.Thread):
 
@@ -139,8 +155,8 @@ def print_summary(summary):
     print('{:7} state messages'.format(summary.num_states))
     print('')
     print('Details by stream:')
-    headers = [['stream', 'records', 'schemas']]
-    rows = [[s.name, s.num_records, s.num_schemas]
+    headers = [['stream', 'records', 'schemas', 'key property collisions']]
+    rows = [[s.name, s.num_records, s.num_schemas, s.num_key_property_collisions]
             for s in summary.streams.values()]
     data = headers + rows
 
