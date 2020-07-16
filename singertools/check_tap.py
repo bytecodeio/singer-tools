@@ -68,8 +68,8 @@ class OutputSummary(object):
     def check_key_properties(self, stream, message):
         for property in stream.key_properties:
             if message.record[property] in stream.key_property_list:
-                print('I saw a key_property collision for {} in stream {}'.format(
-                        message.record[property], stream))
+                print('I saw a duplicate primary key for {}:{} in stream {}'.format(
+                       property,  message.record[property], stream))
                 stream.num_key_property_collisions += 1
             else:
                 stream.key_property_list.append(message.record[property])
@@ -155,7 +155,7 @@ def print_summary(summary):
     print('{:7} state messages'.format(summary.num_states))
     print('')
     print('Details by stream:')
-    headers = [['stream', 'records', 'schemas', 'key property collisions']]
+    headers = [['stream', 'records', 'schemas', 'non-unique primary keys']]
     rows = [[s.name, s.num_records, s.num_schemas, s.num_key_property_collisions]
             for s in summary.streams.values()]
     data = headers + rows
